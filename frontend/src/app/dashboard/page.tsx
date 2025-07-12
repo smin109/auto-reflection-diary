@@ -10,11 +10,13 @@ type Entry = {
 };
 
 export default function Dashboard() {
-  const [user, setUser] = useState<any | null>(undefined); // ✅ 초기값: undefined
+  const [user, setUser] = useState<any | null>(undefined);
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editedResponses, setEditedResponses] = useState<string[]>([]);
   const router = useRouter();
 
-  // Firebase 인증 상태 확인
+  // 인증 상태 확인
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((u) => {
       setUser(u ?? null);
@@ -22,30 +24,54 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, []);
 
-  // 인증 상태가 결정된 후에만 fetch 또는 리다이렉트
+  // 로그인 확인 후 entry 가져오기
   useEffect(() => {
-  const unsubscribe = auth.onAuthStateChanged(async (u) => {
-    if (!u) {
-      router.push("/login");
-    } else {
-      setUser(u);
-      const res = await fetch(`http://localhost:8000/api/get-entries?uid=${u.uid}`);
-      const data = await res.json();
-      console.log("🔥 entries API 결과:", data);  // ✅ 콘솔에 출력해보기
-      setEntries(Array.isArray(data) ? data : []); // 배열이 아닐 경우 빈 배열 처리
+    const unsubscribe = auth.onAuthStateChanged(async (u) => {
+      if (!u) {
+        router.push("/login");
+      } else {
+        setUser(u);
+        const res = await fetch(`http://localhost:8000/api/get-entries?uid=${u.uid}`);
+        const data = await res.json();
+        setEntries(Array.isArray(data) ? data : []);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [router]);
+
+  // 저장 핸들러
+  const handleSave = async (entryDate: string) => {
+    if (!user) return;
+    try {
+      const res = await fetch("http://localhost:8000/api/update-entry", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uid: user.uid,
+          date: entryDate,
+          responses: editedResponses,
+        }),
+      });
+
+      if (!res.ok) throw new Error("수정 실패");
+
+      const updated = [...entries];
+      updated[editingIndex!] = { ...updated[editingIndex!], responses: editedResponses };
+      setEntries(updated);
+      setEditingIndex(null);
+    } catch (err) {
+      console.error("❌ 저장 실패:", err);
+      alert("수정에 실패했습니다.");
     }
-  });
-
-  return () => unsubscribe();
-}, [router]);
-
+  };
 
   if (user === undefined) {
     return <div className="p-4">로그인 상태 확인 중...</div>;
   }
 
   if (user === null) {
-    return null; // 로그인 중이거나 푸시 중
+    return null;
   }
 
   return (
@@ -58,9 +84,52 @@ export default function Dashboard() {
           {entries.map((entry, i) => (
             <li key={i} className="p-4 border rounded shadow-sm">
               <p className="text-sm text-gray-500">{entry.date}</p>
-              {entry.responses.map((ans, j) => (
-                <p key={j} className="mt-2">- {ans}</p>
-              ))}
+
+              {editingIndex === i ? (
+                <div>
+                  {editedResponses.map((r, j) => (
+                    <textarea
+                      key={j}
+                      value={r}
+                      onChange={(e) => {
+                        const newResponses = [...editedResponses];
+                        newResponses[j] = e.target.value;
+                        setEditedResponses(newResponses);
+                      }}
+                      className="w-full p-2 border mt-2"
+                    />
+                  ))}
+                  <div className="mt-2 space-x-2">
+                    <button
+                      onClick={() => handleSave(entry.date)}
+                      className="px-3 py-1 bg-blue-500 text-white rounded"
+                    >
+                      저장
+                    </button>
+                    <button
+                      onClick={() => setEditingIndex(null)}
+                      className="px-3 py-1 bg-gray-300 rounded"
+                    >
+                      취소
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {entry.responses.map((ans, j) => (
+                    <p key={j} className="mt-2">- {ans}</p>
+                  ))}
+                  <button
+                    onClick={() => {
+                      setEditingIndex(i);
+                      setEditedResponses([...entry.responses]);
+                    }}
+                    className="text-sm text-blue-500 mt-2"
+                  >
+                    ✏️ 수정
+                  </button>
+                </>
+              )}
             </li>
           ))}
         </ul>
