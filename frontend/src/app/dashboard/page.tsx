@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
+import { isToday } from "@/utils/isTodayEntry"; // ✅ 유틸 함수 import
 
 type Entry = {
   date: string;
@@ -40,6 +41,9 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, [router]);
 
+  // 오늘 회고가 있는지 여부
+  const hasTodayEntry = entries.some((e) => isToday(e.date));
+
   // 저장 핸들러
   const handleSave = async (entryDate: string) => {
     if (!user) return;
@@ -76,7 +80,20 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-3xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">📒 내 회고 목록</h1>
+      <h1 className="text-2xl font-bold mb-4">📒 내 회고 목록</h1>
+
+      {/* ✅ 오늘 회고가 없을 때 작성하러 가기 버튼 */}
+      {!hasTodayEntry && (
+        <div className="mb-4">
+          <button
+            onClick={() => router.push("/write")}
+            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+          >
+            ✍️ 오늘 회고 작성하러 가기
+          </button>
+        </div>
+      )}
+
       {entries.length === 0 ? (
         <p>아직 회고를 작성하지 않았습니다.</p>
       ) : (
